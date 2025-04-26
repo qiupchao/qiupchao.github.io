@@ -1,64 +1,117 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>二手书录入工具</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">
+  <title>员工证件照处理应用</title>
 </head>
-<body>
-    <div class="container">
-        <h1>二手书录入工具</h1>
-        <form method="POST">
-            <!-- 书名 -->
-            <label for="title">书名：</label>
-            <input type="text" id="title" name="title" required>
 
-            <!-- 作者 -->
-            <label for="author">作者：</label>
-            <input type="text" id="author" name="author" required>
-
-            <!-- 价格 -->
-            <label for="price">价格：</label>
-            <input type="number" id="price" name="price" step="0.01" required>
-
-            <!-- ISBN -->
-            <label for="isbn">ISBN：</label>
-            <input type="text" id="isbn" name="isbn">
-
-            <!-- 成色 -->
-            <label for="condition">成色：</label>
-            <select id="condition" name="condition">
-                <option value="全新">全新</option>
-                <option value="九成新">九成新</option>
-                <option value="八成新">八成新</option>
-                <option value="七成新">七成新</option>
-                <option value="六成新及以下">六成新及以下</option>
-            </select>
-
-            <!-- 发布平台 -->
-            <label>发布平台：</label>
-            <div class="platforms">
-                <label><input type="checkbox" name="platforms" value="转转"> 转转</label>
-                <label><input type="checkbox" name="platforms" value="多抓鱼"> 多抓鱼</label>
-                <label><input type="checkbox" name="platforms" value="京东二手拍拍"> 京东二手拍拍</label>
-                <label><input type="checkbox" name="platforms" value="咸鱼"> 咸鱼</label>
-            </div>
-
-            <!-- 提交按钮 -->
-            <button type="submit">提交</button>
-        </form>
-
-        <!-- 显示 flash 消息 -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="messages">
-                    {% for category, message in messages %}
-                        <div class="{{ category }}">{{ message }}</div>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        {% endwith %}
+<body class="bg-gray-100 font-sans">
+  <div class="container mx-auto p-8">
+    <h1 class="text-3xl font-bold mb-4">员工证件照处理应用</h1>
+    <input type="file" id="inputImage" class="mb-4" accept="image/*">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label for="width" class="block text-sm font-medium text-gray-700">宽度（像素）</label>
+        <input type="number" id="width" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+      </div>
+      <div>
+        <label for="height" class="block text-sm font-medium text-gray-700">高度（像素）</label>
+        <input type="number" id="height" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+      </div>
+      <div>
+        <label for="fileSize" class="block text-sm font-medium text-gray-700">文件大小（KB）</label>
+        <input type="number" id="fileSize" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+      </div>
+      <div>
+        <label for="backgroundColor" class="block text-sm font-medium text-gray-700">背景颜色</label>
+        <select id="backgroundColor" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+          <option value="white">白色</option>
+          <option value="blue">蓝色</option>
+          <option value="red">红色</option>
+        </select>
+      </div>
     </div>
+    <button id="processButton" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">处理图片</button>
+    <div id="outputImageContainer" class="mt-4">
+      <img id="outputImage" class="max-w-full h-auto">
+      <a id="downloadLink" class="mt-2 inline-block px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50" download="processed_photo.png">下载图片</a>
+    </div>
+  </div>
+
+  <script>
+    const inputImage = document.getElementById('inputImage');
+    const widthInput = document.getElementById('width');
+    const heightInput = document.getElementById('height');
+    const fileSizeInput = document.getElementById('fileSize');
+    const backgroundColorSelect = document.getElementById('backgroundColor');
+    const processButton = document.getElementById('processButton');
+    const outputImage = document.getElementById('outputImage');
+    const downloadLink = document.getElementById('downloadLink');
+
+    processButton.addEventListener('click', async () => {
+      const file = inputImage.files[0];
+      if (!file) {
+        alert('请选择一张图片');
+        return;
+      }
+
+      const width = parseInt(widthInput.value);
+      const height = parseInt(heightInput.value);
+      const fileSize = parseInt(fileSizeInput.value);
+      const backgroundColor = backgroundColorSelect.value;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const img = new Image();
+        img.src = e.target.result;
+        await new Promise((resolve) => img.onload = resolve);
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = width || img.width;
+        canvas.height = height || img.height;
+
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+        const offsetX = (canvas.width - img.width * scale) / 2;
+        const offsetY = (canvas.height - img.height * scale) / 2;
+
+        ctx.drawImage(img, 0, 0, img.width, img.height, offsetX, offsetY, img.width * scale, img.height * scale);
+
+        let quality = 1;
+        let dataURL;
+        do {
+          dataURL = canvas.toDataURL('image/jpeg', quality);
+          const base64Data = dataURL.split(',')[1];
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'image/jpeg' });
+          const currentSize = blob.size / 1024;
+
+          if (currentSize <= fileSize || quality < 0.1) {
+            break;
+          }
+          quality -= 0.1;
+        } while (true);
+
+        outputImage.src = dataURL;
+        downloadLink.href = dataURL;
+      };
+      reader.readAsDataURL(file);
+    });
+  </script>
 </body>
+
 </html>
+    
