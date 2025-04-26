@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>二手书录入工具</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>二手书录入工具</h1>
+        <form method="POST">
+            <!-- 书名 -->
+            <label for="title">书名：</label>
+            <input type="text" id="title" name="title" required>
+
+            <!-- 作者 -->
+            <label for="author">作者：</label>
+            <input type="text" id="author" name="author" required>
+
+            <!-- 价格 -->
+            <label for="price">价格：</label>
+            <input type="number" id="price" name="price" step="0.01" required>
+
+            <!-- ISBN -->
+            <label for="isbn">ISBN：</label>
+            <input type="text" id="isbn" name="isbn">
+
+            <!-- 成色 -->
+            <label for="condition">成色：</label>
+            <select id="condition" name="condition">
+                <option value="全新">全新</option>
+                <option value="九成新">九成新</option>
+                <option value="八成新">八成新</option>
+                <option value="七成新">七成新</option>
+                <option value="六成新及以下">六成新及以下</option>
+            </select>
+
+            <!-- 发布平台 -->
+            <label>发布平台：</label>
+            <div class="platforms">
+                <label><input type="checkbox" name="platforms" value="转转"> 转转</label>
+                <label><input type="checkbox" name="platforms" value="多抓鱼"> 多抓鱼</label>
+                <label><input type="checkbox" name="platforms" value="京东二手拍拍"> 京东二手拍拍</label>
+                <label><input type="checkbox" name="platforms" value="咸鱼"> 咸鱼</label>
+            </div>
+
+            <!-- 提交按钮 -->
+            <button type="submit">提交</button>
+        </form>
+
+        <!-- 显示 flash 消息 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="messages">
+                    {% for category, message in messages %}
+                        <div class="{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+    </div>
+</body>
+</html>
