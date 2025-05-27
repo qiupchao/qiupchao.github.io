@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Influence Diagram Generator</title>
+    <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+    <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+    <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Influence Diagram Generator</h1>
+
+        <div class="controls">
+            <div class="section">
+                <h2>Add Node</h2>
+                <input type="text" id="nodeNameInput" placeholder="Node Name">
+                <select id="nodeTypeSelect">
+                    <option value="uncertainty">Uncertainty</option>
+                    <option value="decision">Decision</option>
+                    <option value="value">Value</option>
+                </select>
+                <button id="addNodeBtn">Add Node</button>
+                <div class="node-list-container">
+                    <h3>Existing Nodes:</h3>
+                    <ul id="nodeList"></ul>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Add Influence</h2>
+                <select id="sourceNodeSelect">
+                    <option value="">-- Select Source --</option>
+                </select>
+                <span>&rarr;</span>
+                <select id="targetNodeSelect">
+                    <option value="">-- Select Target --</option>
+                </select>
+                <button id="addInfluenceBtn">Add Influence</button>
+                <div class="influence-list-container">
+                    <h3>Existing Influences:</h3>
+                    <ul id="influenceList"></ul>
+                </div>
+            </div>
+
+            <div class="section action-buttons">
+                <button id="applyLayoutBtn">Apply Layout</button>
+                <button id="exportImageBtn">Export as PNG</button>
+                <button id="clearDiagramBtn">Clear Diagram</button>
+            </div>
+        </div>
+
+        <div id="cy" class="diagram-canvas"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
