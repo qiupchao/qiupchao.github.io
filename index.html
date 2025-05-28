@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Diagram Generator</title>
+    <title>图表生成器</title>
     <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
     <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
     <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
@@ -54,7 +54,7 @@
             <div class="section action-buttons">
                 <button id="applyInfLayoutBtn">应用布局</button>
                 <button id="exportInfImageBtn">导出为 PNG</button>
-                <button id="clearInfDiagramBtn">清空图表</button>
+                <button id="deleteInfNodeBtn" class="delete-button">删除选中节点</button> <button id="clearInfDiagramBtn">清空图表</button>
             </div>
         </div>
 
@@ -72,11 +72,7 @@
                 <input type="number" id="dtValueInput" placeholder="价值" class="hidden">
                 <select id="dtChildTypeSelect">
                     <option value="">-- 选择类型 --</option>
-                    <option value="decision">决策点</option>
-                    <option value="chance">不确定事件点</option>
-                    <option value="terminal">结果点</option>
-                    <option value="branch">分支 (用于事件或决策)</option>
-                </select>
+                    </select>
                 <button id="addDtChildBtn">添加子节点/分支</button>
                 <span id="probabilitySum" style="margin-left: 10px;">概率总和: 0</span>
             </div>
@@ -84,7 +80,7 @@
             <div class="section action-buttons">
                 <button id="applyDtLayoutBtn">应用布局</button>
                 <button id="exportDtImageBtn">导出为 PNG</button>
-                <button id="clearDtDiagramBtn">清空图表</button>
+                <button id="deleteDtNodeBtn" class="delete-button">删除选中节点</button> <button id="clearDtDiagramBtn">清空图表</button>
             </div>
         </div>
 
