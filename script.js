@@ -300,7 +300,7 @@ function updateProbabilitySumDisplay() {
 }
 
 function updateDtTreeStructureList() {
-    if (dtRootNode) {
+    if (dtTreeStructureList) {
         dtTreeStructureList.innerHTML = '';
     }
 
