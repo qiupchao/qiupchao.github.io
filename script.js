@@ -300,7 +300,9 @@ function updateProbabilitySumDisplay() {
 }
 
 function updateDtTreeStructureList() {
-    dtTreeStructureList.innerHTML = '';
+    if (dtRootNode) {
+        dtTreeStructureList.innerHTML = '';
+    }
 
     // Helper function to recursively add nodes/branches to the list
     function addToList(nodeId, indent = 0) {
