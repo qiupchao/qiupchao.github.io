@@ -285,10 +285,10 @@ function updateDtChildTypeOptions() {
 function updateProbabilitySumDisplay() {
     if (currentDtFocusNode && currentDtFocusNode.type === 'chance') {
         let sum = 0;
-        // Iterate through edges originating from the current chance node
-        cy.edges().forEach(edge => {
-            if (edge.source().id() === currentDtFocusNode.id && edge.data('probability') !== undefined) {
-                sum += parseFloat(edge.data('probability'));
+        // Iterate through edges originating from the current chance node in dtElements (our data model)
+        dtElements.forEach(el => {
+            if (el.group === 'edges' && el.data.source === currentDtFocusNode.id && el.data.probability !== undefined) {
+                sum += parseFloat(el.data.probability);
             }
         });
         probabilitySumSpan.textContent = `概率总和: ${sum.toFixed(2)}`;
@@ -564,7 +564,7 @@ addDtChildBtn.addEventListener('click', () => {
         currentDtFocusNode = dtRootNode; // Set focus to the new root
     } else { // Adding a child node to an existing focus node
         const parentId = currentDtFocusNode.id;
-        let branchLabel = childName; // The name entered is now the branch label
+        let branchLabel = childName; // Default branch label based on child name
 
         // Handle specific validations based on parent type
         if (currentDtFocusNode.type === 'terminal') {
@@ -572,17 +572,19 @@ addDtChildBtn.addEventListener('click', () => {
             return;
         }
 
-        // Validate probability if parent is a chance node
         let probability;
+        let value;
+
+        // If parent is a chance node, process probability
         if (currentDtFocusNode.type === 'chance') {
             probability = parseFloat(dtProbabilityInput.value);
-            if (isNaN(probability) || probability < 0 || probability > 1) { // Probability can be 0 for some cases
+            if (isNaN(probability) || probability < 0 || probability > 1) {
                 alert('请为不确定性分支输入有效的概率 (0-1)。');
                 return;
             }
             // Check probability sum
             let currentSum = 0;
-            // Iterate through edges originating from the current chance node in dtElements
+            // Iterate through edges originating from the current chance node in dtElements (our data model)
             dtElements.forEach(el => {
                 if (el.group === 'edges' && el.data.source === parentId && el.data.probability !== undefined) {
                     currentSum += parseFloat(el.data.probability);
@@ -593,21 +595,28 @@ addDtChildBtn.addEventListener('click', () => {
                  alert(`警告: 概率总和将超过 1 (${(currentSum + probability).toFixed(2)})。请调整。`);
                  return;
             }
-            branchLabel = `${childName} (p=${probability.toFixed(2)})`; // Branch label includes probability
+            // Update branchLabel to include probability
+            branchLabel = `${childName} (p=${probability.toFixed(2)})`;
         }
 
-        // Validate value if child is a terminal node
-        let value;
+        // If the new child is a terminal node, process value
         if (childType === 'terminal') {
             value = parseFloat(dtValueInput.value);
             if (isNaN(value)) {
                 alert('结果点需要输入价值。');
                 return;
             }
-            // Branch label for terminal node often includes value
-            branchLabel = `${childName} (价值: ${value})`;
+            // If it's a terminal node AND a child of a chance node, combine labels.
+            if (currentDtFocusNode.type === 'chance') {
+                // Combine probability from parent branch and value for terminal node
+                branchLabel = `${childName} (p=${probability !== undefined ? probability.toFixed(2) : 'N/A'}, 价值: ${value})`;
+            } else {
+                // If it's a terminal node child of a decision node, just show value
+                branchLabel = `${childName} (价值: ${value})`;
+            }
         }
-
+        
+        // --- 提醒：当父节点是不确定性事件点，子节点是结果点时，请确保同时填写概率和价值。---
 
         // Create the new child node data
         const newChildNodeData = { id: newId, label: childName, type: childType };
@@ -729,12 +738,13 @@ deleteDtNodeBtn.addEventListener('click', () => {
     const removedIds = new Set(subtreeElements.map(ele => ele.id()));
     
     // Also explicitly find and collect incoming edges to the nodeToDelete itself
-    const incomingEdgesToDeletedNode = cy.edges().filter(edge => edge.target().id() === nodeIdToDelete);
+    // .incomers('edge') gets all incoming edges. Filter by type 'branch' for DT specific edges.
+    const incomingEdgesToDeletedNode = nodeToDelete.incomers('edge[type="branch"]');
     incomingEdgesToDeletedNode.forEach(edge => removedIds.add(edge.id()));
 
     // Remove elements from Cytoscape.js
-    cy.remove(subtreeElements); // Removes subtree and its connected edges
-    cy.remove(incomingEdgesToDeletedNode); // Explicitly remove incoming edges that might not be part of the successors collection
+    cy.remove(subtreeElements); // Removes subtree and its connected outgoing edges
+    cy.remove(incomingEdgesToDeletedNode); // Explicitly remove incoming edges
 
     // Update internal dtElements array by filtering out all collected elements
     dtElements = dtElements.filter(el => !removedIds.has(el.data.id));
