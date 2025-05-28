@@ -95,7 +95,7 @@ function initializeCytoscape() {
                 }
             },
             {
-                selector: ':selected',
+                selector: ':selected', // Cytoscape built-in selected style
                 style: {
                     'border-color': '#007bff',
                     'border-width': '3px',
@@ -125,7 +125,7 @@ function initializeCytoscape() {
                 }
             },
             {
-                selector: '.selected-focus', // Style for the currently focused node in DT
+                selector: '.selected-focus', // Style for the currently focused node in DT (custom highlight)
                 style: {
                     'border-color': '#f0ad4e', /* Orange highlight */
                     'border-width': '3px',
@@ -137,6 +137,29 @@ function initializeCytoscape() {
             name: 'preset' // Default to preset, then apply specific layout
         }
     });
+
+    // --- Cytoscape Event Listeners for Selection Management ---
+    // Enable delete button when a node is selected
+    cy.on('select', 'node', (evt) => {
+        if (currentMode === 'influence') {
+            deleteInfNodeBtn.disabled = false;
+        } else if (currentMode === 'decisionTree') {
+            deleteDtNodeBtn.disabled = false;
+        }
+    });
+
+    // Disable delete button when no node is selected
+    cy.on('unselect', 'node', (evt) => {
+        // Only disable if no nodes remain selected after this unselect event
+        if (cy.$(':selected').nodes().empty()) {
+            if (currentMode === 'influence') {
+                deleteInfNodeBtn.disabled = true;
+            } else if (currentMode === 'decisionTree') {
+                deleteDtNodeBtn.disabled = true;
+            }
+        }
+    });
+
 
     // Handle node clicks for decision tree focus
     cy.on('tap', 'node', function(evt){
@@ -152,9 +175,12 @@ function initializeCytoscape() {
                 updateProbabilitySumDisplay();
                 updateDtTreeStructureList(); // Update list to highlight focus
 
-                // Highlight the selected node visually
-                cy.elements().removeClass('selected-focus');
-                evt.target.addClass('selected-focus');
+                // Highlight the selected node visually (custom highlight)
+                cy.elements().removeClass('selected-focus'); // Clear all custom focus highlights
+                evt.target.addClass('selected-focus'); // Apply custom focus highlight to the tapped node
+
+                // IMPORTANT: Removed cy.elements().unselect() and evt.target.select() here.
+                // We rely on Cytoscape's default selection behavior for the ':selected' state.
             }
         }
     });
@@ -163,6 +189,11 @@ function initializeCytoscape() {
 // --- Mode Switching Logic ---
 function switchMode(mode) {
     currentMode = mode;
+    // Clear any existing selections when switching modes
+    cy.elements().unselect();
+    deleteInfNodeBtn.disabled = true;
+    deleteDtNodeBtn.disabled = true;
+
     if (mode === 'influence') {
         influenceControls.classList.remove('hidden');
         decisionTreeControls.classList.add('hidden');
@@ -300,7 +331,7 @@ function updateProbabilitySumDisplay() {
 }
 
 function updateDtTreeStructureList() {
-    if (dtTreeStructureList) {
+    if(dtTreeStructureList){
         dtTreeStructureList.innerHTML = '';
     }
 
@@ -451,8 +482,10 @@ exportInfImageBtn.addEventListener('click', () => {
 // NEW: Delete selected node for Influence Diagram
 deleteInfNodeBtn.addEventListener('click', () => {
     const selected = cy.$(':selected');
+    // console.log('Selected elements on delete (Inf):', selected.length, selected.map(el => el.id())); // Debugging log
     if (selected.empty()) {
         alert('请选择一个节点进行删除。');
+        // This button should be disabled if nothing is selected, so this alert is a fallback.
         return;
     }
 
@@ -486,6 +519,11 @@ deleteInfNodeBtn.addEventListener('click', () => {
     updateInfluenceListDisplay();
     // applyInfLayout(); // Optional: re-layout if desired, but might cause shifts
 
+    // After deletion, ensure button is disabled if no nodes are left selected
+    if (cy.$(':selected').nodes().empty()) {
+        deleteInfNodeBtn.disabled = true;
+    }
+
     alert(`节点 "${nodeLabel}" 已删除。`);
 });
 
@@ -498,7 +536,7 @@ clearInfDiagramBtn.addEventListener('click', () => {
         updateInfNodeSelects();
         updateInfNodeListDisplay();
         updateInfluenceListDisplay();
-        // Stay in influence mode, no need to call switchMode
+        deleteInfNodeBtn.disabled = true; // Disable delete button after clear
     }
 });
 
@@ -515,6 +553,9 @@ goToRootBtn.addEventListener('click', () => {
         cy.elements().removeClass('selected-focus');
         const focusCyNode = cy.getElementById(dtRootNode.id);
         if (focusCyNode) focusCyNode.addClass('selected-focus');
+        // Also select the root node in Cytoscape for deletion
+        cy.elements().unselect(); // Deselect all other elements
+        focusCyNode.select(); // Select the root node
     }
 });
 
@@ -533,6 +574,9 @@ goToParentBtn.addEventListener('click', () => {
             cy.elements().removeClass('selected-focus');
             const focusCyNode = cy.getElementById(currentDtFocusNode.id);
             if (focusCyNode) focusCyNode.addClass('selected-focus');
+            // Also select the parent node in Cytoscape for deletion
+            cy.elements().unselect(); // Deselect all other elements
+            focusCyNode.select(); // Select the parent node
         }
     } else { // Already at root or no root
         currentDtFocusNode = dtRootNode; // Go to root if no specific parent or already at root
@@ -542,7 +586,13 @@ goToParentBtn.addEventListener('click', () => {
         updateDtTreeStructureList(); // Update list to highlight focus
 
         cy.elements().removeClass('selected-focus');
-        if (dtRootNode) cy.getElementById(dtRootNode.id).addClass('selected-focus');
+        if (dtRootNode) {
+            const rootCyNode = cy.getElementById(dtRootNode.id);
+            rootCyNode.addClass('selected-focus');
+            // Select the root node in Cytoscape for deletion
+            cy.elements().unselect(); // Deselect all other elements
+            rootCyNode.select(); // Select the root node
+        }
     }
 });
 
@@ -674,12 +724,14 @@ addDtChildBtn.addEventListener('click', () => {
     updateProbabilitySumDisplay(); // Update probability sum for new focus
     updateDtTreeStructureList(); // Update the text list
 
-    // Highlight the new focus node
+    // Highlight the new focus node and ensure it's selected for potential deletion
     cy.elements().removeClass('selected-focus');
+    cy.elements().unselect(); // Deselect all other elements before selecting the new focus
     if (currentDtFocusNode) {
         const focusCyNode = cy.getElementById(currentDtFocusNode.id);
         if (focusCyNode) {
             focusCyNode.addClass('selected-focus');
+            focusCyNode.select(); // Ensure the new focus node is also selected in Cytoscape
         }
     }
 });
@@ -699,8 +751,10 @@ exportDtImageBtn.addEventListener('click', () => {
 // NEW: Delete selected node for Decision Tree
 deleteDtNodeBtn.addEventListener('click', () => {
     const selected = cy.$(':selected');
+    // console.log('Selected elements on delete (DT):', selected.length, selected.map(el => el.id())); // Debugging log
     if (selected.empty()) {
         alert('请选择一个节点进行删除。');
+        // This button should be disabled if nothing is selected, so this alert is a fallback.
         return;
     }
 
@@ -729,6 +783,7 @@ deleteDtNodeBtn.addEventListener('click', () => {
         updateDtChildTypeOptions();
         updateProbabilitySumDisplay();
         updateDtTreeStructureList();
+        deleteDtNodeBtn.disabled = true; // Disable delete button after clear
         return;
     }
 
@@ -765,6 +820,8 @@ deleteDtNodeBtn.addEventListener('click', () => {
         cy.elements().removeClass('selected-focus');
         if (currentDtFocusNode) {
             cy.getElementById(currentDtFocusNode.id).addClass('selected-focus');
+            cy.elements().unselect(); // Deselect all other elements before selecting the new focus
+            cy.getElementById(currentDtFocusNode.id).select(); // Ensure the new focus node is selected
         }
     }
 
@@ -775,7 +832,12 @@ deleteDtNodeBtn.addEventListener('click', () => {
     updateDtTreeStructureList();
     // applyDtLayout(); // Optional: re-layout if desired, but might cause shifts
 
-    alert(`节点 "${nodeLabel}" 及其子树已删除。`);
+    // After deletion, ensure button is disabled if no nodes are left selected
+    if (cy.$(':selected').nodes().empty()) {
+        deleteDtNodeBtn.disabled = true;
+    }
+
+    alert(`节点 "${nodeLabel}" 已删除。`);
 });
 
 
@@ -789,7 +851,7 @@ clearDtDiagramBtn.addEventListener('click', () => {
         updateDtChildTypeOptions(); // Reset options
         updateProbabilitySumDisplay(); // Reset probability sum
         updateDtTreeStructureList(); // Clear list
-        // Stay in decision tree mode, no need to call switchMode
+        deleteDtNodeBtn.disabled = true; // Disable delete button after clear
     }
 });
 
