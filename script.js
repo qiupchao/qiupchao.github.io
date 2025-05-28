@@ -5,13 +5,13 @@ let cy; // Variable to hold our Cytoscape.js instance
 let currentMode = 'influence'; // 'influence' or 'decisionTree'
 
 // --- Influence Diagram Data & Management ---
-let infNodes = [];
-let infInfluences = [];
+let infNodes = []; // Stores node data for influence diagram
+let infInfluences = []; // Stores edge data for influence diagram
 
 // --- Decision Tree Data & Management ---
-let dtRootNode = null; // The root of the decision tree
-let currentDtFocusNode = null; // The node currently being edited/added children to
-let dtElements = []; // Cytoscape elements for decision tree
+let dtRootNode = null; // The root of the decision tree (Cytoscape node data)
+let currentDtFocusNode = null; // The node currently being edited/added children to (Cytoscape node data)
+let dtElements = []; // All Cytoscape elements (nodes and edges) for the decision tree
 
 // --- UI Element References ---
 const influenceControls = document.getElementById('influenceControls');
@@ -56,6 +56,7 @@ function initializeCytoscape() {
     cy = cytoscape({
         container: document.getElementById('cy'), // container to render in
         elements: [], // start with empty elements
+
         style: [ // the stylesheet for the graph
             {
                 selector: 'node',
@@ -64,6 +65,7 @@ function initializeCytoscape() {
                     'label': 'data(label)', // Use 'label' for display
                     'text-valign': 'center',
                     'color': '#333',
+                    'font-family': 'Arial, sans-serif', // Default font
                     'font-size': '12px',
                     'padding': '10px',
                     'border-width': '1px',
@@ -80,13 +82,14 @@ function initializeCytoscape() {
                     'line-color': '#999',
                     'target-arrow-color': '#999',
                     'target-arrow-shape': 'triangle',
-                    'curve-style': 'bezier', // or 'taxi' for right-angle bends
+                    'curve-style': 'bezier', // 'bezier' or 'taxi' for cleaner lines
                     'label': 'data(label)', // Label on edge for decision tree branches
                     'font-size': '10px',
                     'text-background-opacity': 1,
                     'text-background-color': '#fff',
                     'text-background-padding': '3px',
-                    'color': '#555'
+                    'color': '#555',
+                    'font-family': 'Arial, sans-serif' // Default font
                 }
             },
             {
@@ -99,33 +102,32 @@ function initializeCytoscape() {
             },
             // Specific styles for Decision Tree nodes
             {
-                selector: '.decision-node', // Decision Point
+                selector: '.decision-node', // Decision Point (Square)
                 style: {
                     'shape': 'rectangle',
                     'background-color': '#ADD8E6' // Light Blue
                 }
             },
             {
-                selector: '.chance-node', // Uncertainty/Chance Point
+                selector: '.chance-node', // Uncertainty/Chance Point (Circle)
                 style: {
                     'shape': 'ellipse',
                     'background-color': '#90EE90' // Light Green
                 }
             },
             {
-                selector: '.terminal-node', // Result/Terminal Point
+                selector: '.terminal-node', // Result/Terminal Point (Diamond)
                 style: {
                     'shape': 'diamond',
                     'background-color': '#FFB6C1' // Light Pink
                 }
             },
             {
-                selector: '.dt-branch-edge', // Edges representing branches
+                selector: '.selected-focus', // Style for the currently focused node in DT
                 style: {
-                    'label': 'data(label)',
-                    'text-valign': 'center',
-                    'text-halign': 'center',
-                    'text-rotation': 'autorotate'
+                    'border-color': '#f0ad4e', /* Orange highlight */
+                    'border-width': '3px',
+                    'box-shadow': '0 0 8px rgba(240, 173, 78, 0.6)'
                 }
             }
         ],
@@ -137,15 +139,17 @@ function initializeCytoscape() {
     // Handle node clicks for decision tree focus
     cy.on('tap', 'node', function(evt){
         if (currentMode === 'decisionTree') {
-            const nodeId = evt.target.id();
-            const nodeType = evt.target.data('type');
-
-            if (nodeType !== 'branch') { // Branches are edges, not nodes
-                currentDtFocusNode = evt.target.data(); // Store the full data object
+            const nodeData = evt.target.data();
+            // In decision tree, a "branch" is an edge, not a node.
+            // So, we only allow focusing on actual decision, chance, or terminal nodes.
+            if (nodeData.type !== 'branch') {
+                currentDtFocusNode = nodeData; // Store the full data object
                 updateDtFocusNodeDisplay();
                 updateDtChildTypeOptions();
                 updateProbabilitySumDisplay();
-                // Highlight the selected node visually (optional)
+                updateDtTreeStructureList(); // Update list to highlight focus
+
+                // Highlight the selected node visually
                 cy.elements().removeClass('selected-focus');
                 evt.target.addClass('selected-focus');
             }
@@ -190,6 +194,9 @@ function updateInfNodeSelects() {
         option2.textContent = node.id;
         targetSelect.appendChild(option2);
     });
+    // Reset selected values if current selections are no longer valid
+    if (!infNodes.some(n => n.id === sourceSelect.value)) sourceSelect.value = "";
+    if (!infNodes.some(n => n.id === targetSelect.value)) targetSelect.value = "";
 }
 
 function updateInfNodeListDisplay() {
@@ -212,17 +219,17 @@ function updateInfluenceListDisplay() {
 
 function loadInfluenceDiagram() {
     cy.elements().remove(); // Clear current graph
-    cy.add(infNodes.map(n => ({group: 'nodes', data: n})));
-    cy.add(infInfluences);
+    cy.add(infNodes.map(n => ({group: 'nodes', data: n}))); // Add nodes
+    cy.add(infInfluences); // Add edges
     applyInfLayout();
 }
 
 function applyInfLayout() {
     cy.layout({
         name: 'dagre',
-        rankDir: 'LR',
-        nodeSep: 70,
-        rankSep: 100,
+        rankDir: 'LR', // Left to Right
+        nodeSep: 70,    // Space between nodes
+        rankSep: 100,   // Space between ranks (layers)
         padding: 30
     }).run();
 }
@@ -230,6 +237,8 @@ function applyInfLayout() {
 // --- Decision Tree Specific Functions ---
 function updateDtFocusNodeDisplay() {
     currentFocusNodeSpan.textContent = currentDtFocusNode ? currentDtFocusNode.label : "根节点";
+    goToParentBtn.disabled = !currentDtFocusNode || (dtRootNode && currentDtFocusNode.id === dtRootNode.id);
+    goToRootBtn.disabled = !dtRootNode || (dtRootNode && currentDtFocusNode.id === dtRootNode.id);
 }
 
 function updateDtChildTypeOptions() {
@@ -238,20 +247,18 @@ function updateDtChildTypeOptions() {
     dtChildTypeSelect.value = ""; // Reset selection
 
     const options = dtChildTypeSelect.options;
-    for (let i = options.length - 1; i >= 0; i--) {
-        options[i].remove();
+    // Clear existing options except the first placeholder
+    while (options.length > 0) { // Clear all options
+        options[0].remove();
     }
-    options.add(new Option("-- 选择类型 --", ""));
+    options.add(new Option("-- 选择类型 --", "")); // Add placeholder
 
-    if (!currentDtFocusNode || currentDtFocusNode.type === 'terminal') {
-        // Only root or after terminal node: can start a new decision
+    if (!currentDtFocusNode) { // Adding the root node
         options.add(new Option("决策点", "decision"));
-    } else if (currentDtFocusNode.type === 'decision') {
-        options.add(new Option("分支 (决策选项)", "branch"));
-    } else if (currentDtFocusNode.type === 'chance') {
-        options.add(new Option("分支 (事件结果)", "branch"));
-    } else if (currentDtFocusNode.type === 'branch') {
-        // A branch can lead to another decision, chance, or terminal node
+    } else if (currentDtFocusNode.type === 'terminal') {
+        // Terminal nodes cannot have children
+        // No options to add
+    } else { // Decision or Chance node
         options.add(new Option("决策点", "decision"));
         options.add(new Option("不确定事件点", "chance"));
         options.add(new Option("结果点", "terminal"));
@@ -261,7 +268,8 @@ function updateDtChildTypeOptions() {
     dtChildTypeSelect.onchange = () => {
         dtProbabilityInput.classList.add('hidden');
         dtValueInput.classList.add('hidden');
-        if (dtChildTypeSelect.value === 'branch' && currentDtFocusNode && currentDtFocusNode.type === 'chance') {
+        // Probability is associated with the branch *from* a chance node
+        if (currentDtFocusNode && currentDtFocusNode.type === 'chance' && dtChildTypeSelect.value !== '') {
             dtProbabilityInput.classList.remove('hidden');
         } else if (dtChildTypeSelect.value === 'terminal') {
             dtValueInput.classList.remove('hidden');
@@ -272,8 +280,9 @@ function updateDtChildTypeOptions() {
 function updateProbabilitySumDisplay() {
     if (currentDtFocusNode && currentDtFocusNode.type === 'chance') {
         let sum = 0;
+        // Iterate through edges originating from the current chance node
         cy.edges().forEach(edge => {
-            if (edge.source().id() === currentDtFocusNode.id && edge.data('probability')) {
+            if (edge.source().id() === currentDtFocusNode.id && edge.data('probability') !== undefined) {
                 sum += parseFloat(edge.data('probability'));
             }
         });
@@ -287,15 +296,18 @@ function updateProbabilitySumDisplay() {
 
 function updateDtTreeStructureList() {
     dtTreeStructureList.innerHTML = '';
-    // Recursively display tree structure
-    function addToList(node, indent = 0) {
+
+    // Helper function to recursively add nodes/branches to the list
+    function addToList(nodeId, indent = 0) {
+        const node = cy.getElementById(nodeId).data();
+        if (!node) return;
+
         const li = document.createElement('li');
         let prefix = '  '.repeat(indent);
         let nodeLabel = node.label;
+
         if (node.type === 'terminal' && node.value !== undefined) {
             nodeLabel += ` (价值: ${node.value})`;
-        } else if (node.type === 'branch' && node.probability !== undefined) {
-             nodeLabel = `${node.label} (概率: ${node.probability})`; // Branch label on edge
         }
 
         li.textContent = `${prefix}${nodeLabel} [${node.type}]`;
@@ -308,37 +320,48 @@ function updateDtTreeStructureList() {
 
         dtTreeStructureList.appendChild(li);
 
+        // Find outgoing branch edges from this node
         cy.edges().forEach(edge => {
-            if (edge.source().id() === node.id && edge.data('type') === 'branch') {
-                // Find the child node of this branch edge
-                const childNode = cy.getElementById(edge.target().id()).data();
-                if (childNode) {
-                    addToList(childNode, indent + 1);
-                }
+            if (edge.source().id() === nodeId && edge.data('type') === 'branch') {
+                const branchLabel = edge.data('label');
+                const branchLi = document.createElement('li');
+                branchLi.textContent = `${'  '.repeat(indent + 1)}分支: ${branchLabel}`;
+                dtTreeStructureList.appendChild(branchLi);
+                // Recursively add the node at the end of this branch
+                addToList(edge.target().id(), indent + 2);
             }
         });
     }
 
     if (dtRootNode) {
-        addToList(dtRootNode);
+        addToList(dtRootNode.id);
     }
 }
 
 
 function loadDecisionTreeDiagram() {
     cy.elements().remove(); // Clear current graph
-    cy.add(dtElements);
+    cy.add(dtElements); // Add all stored DT elements
     applyDtLayout();
+    // Re-apply focus highlight if a node is focused
+    cy.elements().removeClass('selected-focus');
+    if (currentDtFocusNode) {
+        const focusCyNode = cy.getElementById(currentDtFocusNode.id);
+        if (focusCyNode) {
+            focusCyNode.addClass('selected-focus');
+        }
+    }
+    updateDtTreeStructureList(); // Ensure list is updated on load
 }
 
 function applyDtLayout() {
     cy.layout({
         name: 'dagre',
-        rankDir: 'LR',
+        rankDir: 'LR', // Left to Right
         nodeSep: 50,  // Space between nodes in the same rank
         rankSep: 120, // Space between ranks (layers)
         padding: 30,
-        fit: true
+        fit: true // Fit the graph to the viewport
     }).run();
 }
 
@@ -349,7 +372,7 @@ function applyDtLayout() {
 influenceModeBtn.addEventListener('click', () => switchMode('influence'));
 decisionTreeModeBtn.addEventListener('click', () => switchMode('decisionTree'));
 
-// --- Influence Diagram Event Listeners (from previous version) ---
+// --- Influence Diagram Event Listeners ---
 addInfNodeBtn.addEventListener('click', () => {
     const nodeName = infNodeNameInput.value.trim();
     const nodeType = infNodeTypeSelect.value;
@@ -372,15 +395,15 @@ addInfNodeBtn.addEventListener('click', () => {
         shape: shape,
         color: color
     };
-    infNodes.push(newNode);
+    infNodes.push(newNode); // Store data in our array
     
-    // Update Cytoscape directly
+    // Add to Cytoscape directly
     cy.add({group: 'nodes', data: newNode});
     
-    infNodeNameInput.value = '';
-    updateInfNodeSelects();
-    updateInfNodeListDisplay();
-    applyInfLayout();
+    infNodeNameInput.value = ''; // Clear input
+    updateInfNodeSelects(); // Update dropdowns
+    updateInfNodeListDisplay(); // Update list display
+    applyInfLayout(); // Apply layout
 });
 
 addInfluenceBtn.addEventListener('click', () => {
@@ -391,25 +414,25 @@ addInfluenceBtn.addEventListener('click', () => {
     if (sourceNodeId === targetNodeId) { alert('源节点和目标节点不能相同。'); return; }
 
     const edgeId = `${sourceNodeId}-${targetNodeId}`;
-    if (infInfluences.some(edge => edge.data.id === edgeId)) { alert(`影响关系 "${sourceNodeId} -> ${targetNodeId}" 已经存在。`); return; }
+    if (infInfluences.some(edge => edge.data.id === edgeId)) { alert(`影响关系 "${sourceNodeId} → ${targetNodeId}" 已经存在。`); return; }
 
     const newInfluence = {
         group: 'edges',
         data: { id: edgeId, source: sourceNodeId, target: targetNodeId }
     };
-    infInfluences.push(newInfluence);
+    infInfluences.push(newInfluence); // Store data in our array
 
-    // Update Cytoscape directly
+    // Add to Cytoscape directly
     cy.add(newInfluence);
     
-    updateInfluenceListDisplay();
-    applyInfLayout();
+    updateInfluenceListDisplay(); // Update list display
+    applyInfLayout(); // Apply layout
 });
 
 applyInfLayoutBtn.addEventListener('click', () => applyInfLayout());
 
 exportInfImageBtn.addEventListener('click', () => {
-    const png64 = cy.png({ full: true, scale: 2 });
+    const png64 = cy.png({ full: true, scale: 2 }); // Scale up for higher resolution
     const downloadLink = document.createElement('a');
     downloadLink.href = png64;
     downloadLink.download = 'influence_diagram.png';
@@ -426,7 +449,7 @@ clearInfDiagramBtn.addEventListener('click', () => {
         updateInfNodeSelects();
         updateInfNodeListDisplay();
         updateInfluenceListDisplay();
-        switchMode('influence'); // Stay in influence mode
+        // Stay in influence mode, no need to call switchMode
     }
 });
 
@@ -438,29 +461,37 @@ goToRootBtn.addEventListener('click', () => {
         updateDtFocusNodeDisplay();
         updateDtChildTypeOptions();
         updateProbabilitySumDisplay();
+        updateDtTreeStructureList(); // Update list to highlight focus
+
         cy.elements().removeClass('selected-focus');
-        cy.getElementById(dtRootNode.id).addClass('selected-focus');
+        const focusCyNode = cy.getElementById(dtRootNode.id);
+        if (focusCyNode) focusCyNode.addClass('selected-focus');
     }
 });
 
 goToParentBtn.addEventListener('click', () => {
-    if (currentDtFocusNode && currentDtFocusNode.parent) {
-        // Find the parent node (which is actually the source of the branch edge)
-        const parentEdge = cy.getElementById(currentDtFocusNode.parent);
-        if (parentEdge) {
-            const parentNode = parentEdge.source().data();
-            currentDtFocusNode = parentNode;
+    if (currentDtFocusNode && dtRootNode && currentDtFocusNode.id !== dtRootNode.id) {
+        // Find the edge that points to currentDtFocusNode
+        const incomingEdge = cy.edges().filter(edge => edge.target().id() === currentDtFocusNode.id && edge.data('type') === 'branch');
+        if (incomingEdge.length > 0) {
+            const parentNodeId = incomingEdge[0].source().id();
+            currentDtFocusNode = cy.getElementById(parentNodeId).data();
             updateDtFocusNodeDisplay();
             updateDtChildTypeOptions();
             updateProbabilitySumDisplay();
+            updateDtTreeStructureList(); // Update list to highlight focus
+
             cy.elements().removeClass('selected-focus');
-            cy.getElementById(parentNode.id).addClass('selected-focus');
+            const focusCyNode = cy.getElementById(currentDtFocusNode.id);
+            if (focusCyNode) focusCyNode.addClass('selected-focus');
         }
-    } else {
-        currentDtFocusNode = dtRootNode; // Go to root if no specific parent
+    } else { // Already at root or no root
+        currentDtFocusNode = dtRootNode; // Go to root if no specific parent or already at root
         updateDtFocusNodeDisplay();
         updateDtChildTypeOptions();
         updateProbabilitySumDisplay();
+        updateDtTreeStructureList(); // Update list to highlight focus
+
         cy.elements().removeClass('selected-focus');
         if (dtRootNode) cy.getElementById(dtRootNode.id).addClass('selected-focus');
     }
@@ -469,14 +500,12 @@ goToParentBtn.addEventListener('click', () => {
 
 addDtChildBtn.addEventListener('click', () => {
     const childName = dtChildNameInput.value.trim();
-    const childType = dtChildTypeSelect.value;
-    const probability = parseFloat(dtProbabilityInput.value);
-    const value = parseFloat(dtValueInput.value);
+    const childType = dtChildTypeSelect.value; // This is now the TYPE OF THE NEW NODE
 
-    if (!childName) { alert('请输入子节点或分支名称。'); return; }
-    if (!childType) { alert('请选择子节点或分支类型。'); return; }
+    if (!childName) { alert('请输入名称。'); return; }
+    if (!childType) { alert('请选择类型。'); return; }
 
-    const newId = `node-${Date.now()}`; // Unique ID for new node/edge
+    const newId = `node-${Date.now()}`; // Unique ID for new node
 
     if (!currentDtFocusNode) { // Adding the root node
         if (childType !== 'decision') {
@@ -484,25 +513,30 @@ addDtChildBtn.addEventListener('click', () => {
             return;
         }
         dtRootNode = { id: newId, label: childName, type: 'decision', classes: 'decision-node' };
-        currentDtFocusNode = dtRootNode;
-        dtElements.push({ group: 'nodes', data: dtRootNode });
-    } else { // Adding children to an existing node
+        dtElements.push({ group: 'nodes', data: dtRootNode, classes: dtRootNode.classes });
+        currentDtFocusNode = dtRootNode; // Set focus to the new root
+    } else { // Adding a child node to an existing focus node
         const parentId = currentDtFocusNode.id;
-        let edgeLabel = childName; // Default label for edge
+        let branchLabel = childName; // The name entered is now the branch label
 
+        // Handle specific validations based on parent type
+        if (currentDtFocusNode.type === 'terminal') {
+            alert('结果点不能添加子节点。');
+            return;
+        }
+
+        // Validate probability if parent is a chance node
+        let probability;
         if (currentDtFocusNode.type === 'chance') {
-            if (childType !== 'branch') {
-                alert('不确定性事件点只能添加“分支”。');
-                return;
-            }
-            if (isNaN(probability) || probability <= 0 || probability > 1) {
+            probability = parseFloat(dtProbabilityInput.value);
+            if (isNaN(probability) || probability < 0 || probability > 1) { // Probability can be 0 for some cases
                 alert('请为不确定性分支输入有效的概率 (0-1)。');
                 return;
             }
-            // Check probability sum if it's a chance node
+            // Check probability sum
             let currentSum = 0;
             cy.edges().forEach(edge => {
-                if (edge.source().id() === parentId && edge.data('probability')) {
+                if (edge.source().id() === parentId && edge.data('probability') !== undefined) {
                     currentSum += parseFloat(edge.data('probability'));
                 }
             });
@@ -510,21 +544,24 @@ addDtChildBtn.addEventListener('click', () => {
                  alert(`警告: 概率总和将超过 1 (${(currentSum + probability).toFixed(2)})。请调整。`);
                  return;
             }
-            edgeLabel = `${childName} (p=${probability.toFixed(2)})`;
-
-        } else if (currentDtFocusNode.type === 'decision') {
-            if (childType !== 'branch') {
-                alert('决策点只能添加“分支”。');
-                return;
-            }
-        } else if (currentDtFocusNode.type === 'branch') {
-            // Branch can lead to decision, chance, or terminal
-        } else if (currentDtFocusNode.type === 'terminal') {
-            alert('结果点不能添加子节点。');
-            return;
+            branchLabel = `${childName} (p=${probability.toFixed(2)})`; // Branch label includes probability
         }
 
-        const newChildNode = { id: newId, label: childName, type: childType };
+        // Validate value if child is a terminal node
+        let value;
+        if (childType === 'terminal') {
+            value = parseFloat(dtValueInput.value);
+            if (isNaN(value)) {
+                alert('结果点需要输入价值。');
+                return;
+            }
+            // Branch label for terminal node often includes value
+            branchLabel = `${childName} (价值: ${value})`;
+        }
+
+
+        // Create the new child node data
+        const newChildNodeData = { id: newId, label: childName, type: childType };
         let nodeClasses = '';
         if (childType === 'decision') {
             nodeClasses = 'decision-node';
@@ -532,66 +569,49 @@ addDtChildBtn.addEventListener('click', () => {
             nodeClasses = 'chance-node';
         } else if (childType === 'terminal') {
             nodeClasses = 'terminal-node';
-            if (!isNaN(value)) {
-                newChildNode.value = value; // Store value
-                newChildNode.label = `${childName} (价值: ${value})`; // Update label
-            } else {
-                alert('结果点需要输入价值。');
-                return;
-            }
-        } else if (childType === 'branch') {
-            // Branch is an edge, not a node. It links a node to a new node.
-            // We need a dummy node for the branch to connect to if it's not a terminal
-            // For simplicity, we create a new node and then an edge.
-            // The edge will have the label and probability.
-            // The actual node represents the "state" after the branch.
-
-            const branchEdgeId = `edge-${parentId}-${newId}`;
-            if (dtElements.some(el => el.group === 'edges' && el.data.id === branchEdgeId)) {
-                alert(`分支 "${childName}" 已经存在。`);
-                return;
-            }
-
-            const branchEdge = {
-                group: 'edges',
-                data: {
-                    id: branchEdgeId,
-                    source: parentId,
-                    target: newId, // This will be the ID of the new node created below
-                    label: edgeLabel,
-                    type: 'branch', // Custom type for edge classification
-                    probability: (currentDtFocusNode.type === 'chance' ? probability : undefined) // Store probability
-                },
-                classes: 'dt-branch-edge'
-            };
-            dtElements.push(branchEdge);
-            // After adding branch edge, the new node created is the one we "focus" on
-            currentDtFocusNode = newChildNode; // New node becomes focus
+            newChildNodeData.value = value; // Store value in node data
         }
 
-        if (childType !== 'branch') { // Only add actual nodes (not just branch edges)
-             dtElements.push({ group: 'nodes', data: newChildNode, classes: nodeClasses });
-        } else { // If we're adding a branch, the new child becomes the focus node
-             // The new node is added below, and this branch edge is created.
-             // We need to link this branch edge to a *new* node.
-             // Let's create an implicit "dummy" node for the end of the branch.
-             // Or, more correctly, the branch edge leads to the actual next node.
-             // For simplicity, we just create the node. The "branch" type refers to the edge.
+        // Add the new node to dtElements
+        dtElements.push({ group: 'nodes', data: newChildNodeData, classes: nodeClasses });
+
+        // Create the edge (branch) connecting parent to new child
+        const branchEdgeId = `edge-${parentId}-${newId}`;
+        // Check if this specific edge already exists (e.g., if re-adding same branch)
+        if (dtElements.some(el => el.group === 'edges' && el.data.id === branchEdgeId)) {
+            alert(`从 ${currentDtFocusNode.label} 到 ${childName} 的分支已经存在。`);
+            return;
         }
+
+        const branchEdge = {
+            group: 'edges',
+            data: {
+                id: branchEdgeId,
+                source: parentId,
+                target: newId,
+                label: branchLabel, // Label on the edge
+                type: 'branch', // Custom type for edge classification
+                probability: (currentDtFocusNode.type === 'chance' ? probability : undefined) // Store probability on edge
+            },
+            classes: 'dt-branch-edge'
+        };
+        dtElements.push(branchEdge);
+
+        currentDtFocusNode = newChildNodeData; // Set focus to the newly added child node
     }
 
-    // Clear inputs
+    // Clear inputs and hide specific fields
     dtChildNameInput.value = '';
     dtProbabilityInput.value = '';
     dtValueInput.value = '';
-    dtChildTypeSelect.value = '';
+    dtChildTypeSelect.value = ''; // Reset select
     dtProbabilityInput.classList.add('hidden');
     dtValueInput.classList.add('hidden');
 
     loadDecisionTreeDiagram(); // Reload to reflect changes
     updateDtFocusNodeDisplay(); // Update focus display
     updateDtChildTypeOptions(); // Update options based on new focus
-    updateProbabilitySumDisplay();
+    updateProbabilitySumDisplay(); // Update probability sum for new focus
     updateDtTreeStructureList(); // Update the text list
 
     // Highlight the new focus node
@@ -607,7 +627,7 @@ addDtChildBtn.addEventListener('click', () => {
 applyDtLayoutBtn.addEventListener('click', () => applyDtLayout());
 
 exportDtImageBtn.addEventListener('click', () => {
-    const png64 = cy.png({ full: true, scale: 2 });
+    const png64 = cy.png({ full: true, scale: 2 }); // Scale up for higher resolution
     const downloadLink = document.createElement('a');
     downloadLink.href = png64;
     downloadLink.download = 'decision_tree.png';
@@ -621,12 +641,12 @@ clearDtDiagramBtn.addEventListener('click', () => {
         dtRootNode = null;
         currentDtFocusNode = null;
         dtElements = [];
-        initializeCytoscape();
-        updateDtFocusNodeDisplay();
-        updateDtChildTypeOptions();
-        updateProbabilitySumDisplay();
-        updateDtTreeStructureList();
-        switchMode('decisionTree'); // Stay in decision tree mode
+        initializeCytoscape(); // Reset Cytoscape
+        updateDtFocusNodeDisplay(); // Reset focus display
+        updateDtChildTypeOptions(); // Reset options
+        updateProbabilitySumDisplay(); // Reset probability sum
+        updateDtTreeStructureList(); // Clear list
+        // Stay in decision tree mode, no need to call switchMode
     }
 });
 
