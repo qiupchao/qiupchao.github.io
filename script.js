@@ -30,6 +30,7 @@ const addInfluenceBtn = document.getElementById('addInfluenceBtn');
 const influenceList = document.getElementById('influenceList');
 const applyInfLayoutBtn = document.getElementById('applyInfLayoutBtn');
 const exportInfImageBtn = document.getElementById('exportInfImageBtn');
+const deleteInfNodeBtn = document.getElementById('deleteInfNodeBtn'); // NEW: Delete button ref
 const clearInfDiagramBtn = document.getElementById('clearInfDiagramBtn');
 
 // Decision Tree UI elements
@@ -44,6 +45,7 @@ const addDtChildBtn = document.getElementById('addDtChildBtn');
 const probabilitySumSpan = document.getElementById('probabilitySum');
 const applyDtLayoutBtn = document.getElementById('applyDtLayoutBtn');
 const exportDtImageBtn = document.getElementById('exportDtImageBtn');
+const deleteDtNodeBtn = document.getElementById('deleteDtNodeBtn'); // NEW: Delete button ref
 const clearDtDiagramBtn = document.getElementById('clearDtDiagramBtn');
 const dtTreeStructureList = document.getElementById('dtTreeStructureList');
 
@@ -142,10 +144,11 @@ function initializeCytoscape() {
             const nodeData = evt.target.data();
             // In decision tree, a "branch" is an edge, not a node.
             // So, we only allow focusing on actual decision, chance, or terminal nodes.
-            if (nodeData.type !== 'branch') {
+            // The `dtChildTypeSelect` logic has been updated to reflect adding a NODE.
+            if (nodeData.type !== 'branch') { // This check should always be true for tap-able nodes
                 currentDtFocusNode = nodeData; // Store the full data object
                 updateDtFocusNodeDisplay();
-                updateDtChildTypeOptions();
+                updateDtChildTypeOptions(); // Update options based on new focus
                 updateProbabilitySumDisplay();
                 updateDtTreeStructureList(); // Update list to highlight focus
 
@@ -258,7 +261,7 @@ function updateDtChildTypeOptions() {
     } else if (currentDtFocusNode.type === 'terminal') {
         // Terminal nodes cannot have children
         // No options to add
-    } else { // Decision or Chance node
+    } else { // Decision or Chance node can add other nodes
         options.add(new Option("决策点", "decision"));
         options.add(new Option("不确定事件点", "chance"));
         options.add(new Option("结果点", "terminal"));
@@ -268,10 +271,12 @@ function updateDtChildTypeOptions() {
     dtChildTypeSelect.onchange = () => {
         dtProbabilityInput.classList.add('hidden');
         dtValueInput.classList.add('hidden');
-        // Probability is associated with the branch *from* a chance node
+        // If parent is a chance node, probability input is needed for the branch
         if (currentDtFocusNode && currentDtFocusNode.type === 'chance' && dtChildTypeSelect.value !== '') {
             dtProbabilityInput.classList.remove('hidden');
-        } else if (dtChildTypeSelect.value === 'terminal') {
+        } 
+        // If the new child node type is 'terminal', value input is needed
+        if (dtChildTypeSelect.value === 'terminal') {
             dtValueInput.classList.remove('hidden');
         }
     };
@@ -408,7 +413,7 @@ addInfNodeBtn.addEventListener('click', () => {
 
 addInfluenceBtn.addEventListener('click', () => {
     const sourceNodeId = sourceNodeSelect.value;
-    const targetNodeId = targetNodeSelect.value;
+    const targetNodeId = targetSelect.value;
 
     if (!sourceNodeId || !targetNodeId) { alert('请选择源节点和目标节点。'); return; }
     if (sourceNodeId === targetNodeId) { alert('源节点和目标节点不能相同。'); return; }
@@ -440,6 +445,48 @@ exportInfImageBtn.addEventListener('click', () => {
     downloadLink.click();
     document.body.removeChild(downloadLink);
 });
+
+// NEW: Delete selected node for Influence Diagram
+deleteInfNodeBtn.addEventListener('click', () => {
+    const selected = cy.$(':selected');
+    if (selected.empty()) {
+        alert('请选择一个节点进行删除。');
+        return;
+    }
+
+    if (selected.length > 1) {
+        alert('请一次只选择一个节点进行删除。');
+        return;
+    }
+
+    const nodeToDelete = selected[0]; // Get the selected node element
+    const nodeIdToDelete = nodeToDelete.id();
+    const nodeLabel = nodeToDelete.data('label');
+
+    if (!confirm(`确定要删除节点 "${nodeLabel}" 及其所有关联的影响关系吗？`)) {
+        return;
+    }
+
+    // 1. Remove from Cytoscape.js (this automatically removes connected edges)
+    cy.remove(nodeToDelete);
+
+    // 2. Update internal data structures
+    // Remove node from infNodes array
+    infNodes = infNodes.filter(node => node.id !== nodeIdToDelete);
+
+    // Remove influences (edges) connected to this node from infInfluences array
+    // This part is crucial as cy.remove() only updates the visual graph, not our data model.
+    infInfluences = infInfluences.filter(edge => edge.data.source !== nodeIdToDelete && edge.data.target !== nodeIdToDelete);
+
+    // 3. Update UI displays
+    updateInfNodeSelects();
+    updateInfNodeListDisplay();
+    updateInfluenceListDisplay();
+    // applyInfLayout(); // Optional: re-layout if desired, but might cause shifts
+
+    alert(`节点 "${nodeLabel}" 已删除。`);
+});
+
 
 clearInfDiagramBtn.addEventListener('click', () => {
     if (confirm('确定要清空所有影响图数据吗？此操作无法撤销。')) {
@@ -535,11 +582,13 @@ addDtChildBtn.addEventListener('click', () => {
             }
             // Check probability sum
             let currentSum = 0;
-            cy.edges().forEach(edge => {
-                if (edge.source().id() === parentId && edge.data('probability') !== undefined) {
-                    currentSum += parseFloat(edge.data('probability'));
+            // Iterate through edges originating from the current chance node in dtElements
+            dtElements.forEach(el => {
+                if (el.group === 'edges' && el.data.source === parentId && el.data.probability !== undefined) {
+                    currentSum += parseFloat(el.data.probability);
                 }
             });
+
             if (currentSum + probability > 1.001) { // Allow for tiny floating point errors
                  alert(`警告: 概率总和将超过 1 (${(currentSum + probability).toFixed(2)})。请调整。`);
                  return;
@@ -605,12 +654,12 @@ addDtChildBtn.addEventListener('click', () => {
     dtProbabilityInput.value = '';
     dtValueInput.value = '';
     dtChildTypeSelect.value = ''; // Reset select
-    dtProbabilityInput.classList.add('hidden');
-    dtValueInput.classList.add('hidden');
+    // Explicitly call updateDtChildTypeOptions to correctly hide inputs after clearing
+    updateDtChildTypeOptions(); 
 
     loadDecisionTreeDiagram(); // Reload to reflect changes
     updateDtFocusNodeDisplay(); // Update focus display
-    updateDtChildTypeOptions(); // Update options based on new focus
+    // updateDtChildTypeOptions(); // Already called by previous line
     updateProbabilitySumDisplay(); // Update probability sum for new focus
     updateDtTreeStructureList(); // Update the text list
 
@@ -635,6 +684,88 @@ exportDtImageBtn.addEventListener('click', () => {
     downloadLink.click();
     document.body.removeChild(downloadLink);
 });
+
+// NEW: Delete selected node for Decision Tree
+deleteDtNodeBtn.addEventListener('click', () => {
+    const selected = cy.$(':selected');
+    if (selected.empty()) {
+        alert('请选择一个节点进行删除。');
+        return;
+    }
+
+    if (selected.length > 1) {
+        alert('请一次只选择一个节点进行删除。');
+        return;
+    }
+
+    const nodeToDelete = selected[0]; // Get the selected node element
+    const nodeIdToDelete = nodeToDelete.id();
+    const nodeLabel = nodeToDelete.data('label');
+
+    if (!confirm(`确定要删除节点 "${nodeLabel}" 及其所有关联的分支和子树吗？此操作无法撤销。`)) {
+        return;
+    }
+
+    // If deleting the root node
+    if (dtRootNode && nodeIdToDelete === dtRootNode.id) {
+        dtRootNode = null;
+        currentDtFocusNode = null;
+        dtElements = []; // Clear all elements
+        cy.elements().remove(); // Clear Cytoscape graph
+        alert(`根节点 "${nodeLabel}" 已删除。`);
+        // Update all UI elements
+        updateDtFocusNodeDisplay();
+        updateDtChildTypeOptions();
+        updateProbabilitySumDisplay();
+        updateDtTreeStructureList();
+        return;
+    }
+
+    // For non-root nodes:
+    // Get all elements (nodes and edges) in the subtree rooted at nodeToDelete
+    const subtreeElements = nodeToDelete.add(nodeToDelete.successors()); // Includes the node itself and all its descendants (nodes and edges)
+
+    // Collect IDs of elements to be removed from dtElements array
+    const removedIds = new Set(subtreeElements.map(ele => ele.id()));
+    
+    // Also explicitly find and collect incoming edges to the nodeToDelete itself
+    const incomingEdgesToDeletedNode = cy.edges().filter(edge => edge.target().id() === nodeIdToDelete);
+    incomingEdgesToDeletedNode.forEach(edge => removedIds.add(edge.id()));
+
+    // Remove elements from Cytoscape.js
+    cy.remove(subtreeElements); // Removes subtree and its connected edges
+    cy.remove(incomingEdgesToDeletedNode); // Explicitly remove incoming edges that might not be part of the successors collection
+
+    // Update internal dtElements array by filtering out all collected elements
+    dtElements = dtElements.filter(el => !removedIds.has(el.data.id));
+
+    // Update currentDtFocusNode if the deleted node was the focus or an ancestor of the focus
+    if (currentDtFocusNode && removedIds.has(currentDtFocusNode.id)) {
+        // If the focus node was deleted, or an ancestor of the focus node was deleted
+        // Find the parent of the *original* nodeToDelete to set as new focus
+        const parentNodeId = incomingEdgesToDeletedNode.length > 0 ? incomingEdgesToDeletedNode[0].source().id() : null;
+        if (parentNodeId && cy.getElementById(parentNodeId).length > 0) { // Check if parent still exists in graph
+            currentDtFocusNode = cy.getElementById(parentNodeId).data();
+        } else {
+            currentDtFocusNode = dtRootNode; // Fallback to root if parent is also gone or no parent
+        }
+        // Re-apply highlight to the new focus node
+        cy.elements().removeClass('selected-focus');
+        if (currentDtFocusNode) {
+            cy.getElementById(currentDtFocusNode.id).addClass('selected-focus');
+        }
+    }
+
+    // Update UI displays
+    updateDtFocusNodeDisplay();
+    updateDtChildTypeOptions();
+    updateProbabilitySumDisplay();
+    updateDtTreeStructureList();
+    // applyDtLayout(); // Optional: re-layout if desired, but might cause shifts
+
+    alert(`节点 "${nodeLabel}" 及其子树已删除。`);
+});
+
 
 clearDtDiagramBtn.addEventListener('click', () => {
     if (confirm('确定要清空所有决策树数据吗？此操作无法撤销。')) {
