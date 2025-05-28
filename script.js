@@ -355,8 +355,10 @@ function updateDtTreeStructureList() {
             li.style.fontWeight = 'bold';
             li.style.backgroundColor = '#e0e0e0';
         }
-
-        dtTreeStructureList.appendChild(li);
+        if(dtTreeStructureList){
+             dtTreeStructureList.appendChild(li);
+        }
+       
 
         // Find outgoing branch edges from this node
         cy.edges().forEach(edge => {
